@@ -1,0 +1,13 @@
+# Python virtual environments
+venv/
+.venv/
+
+# Local editor settings backups (keep actual .vscode tracked)
+.vscode/*.tmp
+
+# Demo file not for deploy
+.demo_no_deps.py
+
+# Bytecode
+__pycache__/
+*.pyc
