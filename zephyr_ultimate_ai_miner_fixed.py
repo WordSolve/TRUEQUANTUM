@@ -172,6 +172,9 @@ class NeuralNetwork:
         import hashlib
         cascade = x.astype(np.float32)
         
+        # Detect if input is batched (2D) or single sample (1D)
+        is_batch = len(cascade.shape) == 2
+        
         for i in range(len(self.weights)):
             # Forward pass: linear transform + activation
             cascade = self._activate(cascade.dot(self.weights[i]) + self.biases[i], name="swish")
@@ -184,10 +187,20 @@ class NeuralNetwork:
                 gate_signal = np.frombuffer(gate_hash, dtype=np.uint8).astype(np.float32) / 255.0
                 
                 # Apply gate modulation (waterfall effect)
-                if len(gate_signal) >= len(cascade):
-                    cascade = cascade * gate_signal[:len(cascade)]
+                if is_batch:
+                    # For batched input, tile the gate signal to match the feature dimension
+                    n_features = cascade.shape[1]
+                    if len(gate_signal) >= n_features:
+                        gate_mod = gate_signal[:n_features]
+                    else:
+                        gate_mod = np.tile(gate_signal, int(np.ceil(n_features / len(gate_signal))))[:n_features]
+                    cascade = cascade * gate_mod
                 else:
-                    cascade = cascade * np.tile(gate_signal, int(np.ceil(len(cascade) / len(gate_signal))))[:len(cascade)]
+                    # For single sample, tile to match cascade length
+                    if len(gate_signal) >= len(cascade):
+                        cascade = cascade * gate_signal[:len(cascade)]
+                    else:
+                        cascade = cascade * np.tile(gate_signal, int(np.ceil(len(cascade) / len(gate_signal))))[:len(cascade)]
         
         self.waterfall_cascade_state = cascade.copy()
         return cascade
@@ -237,6 +250,9 @@ class NeuralNetwork:
         """
         import hashlib
         
+        # Detect if input is batched (2D) or single sample (1D)
+        is_batch = len(x.shape) == 2
+        
         # Get network activation energy
         activations = []
         a = x.astype(np.float32)
@@ -247,7 +263,12 @@ class NeuralNetwork:
         # Compute "heat" (magnitude of activations)
         heat_map = np.zeros_like(a)
         for act in activations:
-            heat_map += np.abs(act[:len(heat_map)])
+            if is_batch:
+                # For batched input, sum across compatible dimensions
+                min_shape = min(heat_map.shape[1], act.shape[1])
+                heat_map[:, :min_shape] += np.abs(act[:, :min_shape])
+            else:
+                heat_map += np.abs(act[:len(heat_map)])
         heat_map = heat_map / (len(activations) + 1e-8)
         
         # Volcano eruption: amplify peaks, suppress valleys
@@ -257,11 +278,21 @@ class NeuralNetwork:
         eruption_pattern = np.frombuffer(eruption_hash, dtype=np.uint8).astype(np.float32) / 255.0
         
         # Pad eruption pattern if needed
-        if len(eruption_pattern) < len(heat_map):
-            eruption_pattern = np.tile(eruption_pattern, int(np.ceil(len(heat_map) / len(eruption_pattern))))[:len(heat_map)]
+        if is_batch:
+            n_features = heat_map.shape[1]
+            if len(eruption_pattern) >= n_features:
+                eruption_pattern = eruption_pattern[:n_features]
+            else:
+                eruption_pattern = np.tile(eruption_pattern, int(np.ceil(n_features / len(eruption_pattern))))[:n_features]
+            # Broadcast eruption_pattern to match batch dimension
+            blast_mult = 1.0 + 2.0 * (heat_map * eruption_pattern[np.newaxis, :])
+        else:
+            if len(eruption_pattern) >= len(heat_map):
+                eruption_pattern = eruption_pattern[:len(heat_map)]
+            else:
+                eruption_pattern = np.tile(eruption_pattern, int(np.ceil(len(heat_map) / len(eruption_pattern))))[:len(heat_map)]
+            blast_mult = 1.0 + 2.0 * (heat_map * eruption_pattern)
         
-        # Blast multiplier: high-heat neurons get amplified, low-heat get suppressed
-        blast_mult = 1.0 + 2.0 * (heat_map * eruption_pattern)
         blasted = a * blast_mult
         
         # Record blast energy
@@ -271,16 +302,63 @@ class NeuralNetwork:
         return blasted
 
     def predict(self, x: np.ndarray):
-        """Predict with Waterfall Technology applied."""
+        """Predict with Waterfall Technology applied.
+        
+        Optimized: Batch processing with properly aligned outputs.
+        """
+        # Apply Waterfall Technology (goes through all layers)
         cascade = self.waterfall_technology(x)
         
         # Apply Waterfall Healing if needed
         self.waterfall_healing()
         
-        # Apply Volcano Blast amplification
-        blasted = self.volcano_blast(x)
+        # For volcano blast, we need to match dimensions with cascade
+        # So we'll apply it and then pass through the final layer
+        a = x.astype(np.float32)
+        activations = []
+        for i in range(len(self.weights) - 1):
+            a = self._activate(a.dot(self.weights[i]) + self.biases[i], name="swish")
+            activations.append(a.copy())
         
-        # Final output: blend waterfall cascade with volcano blast
+        # Now apply volcano blast effect to the penultimate layer
+        heat_map = np.zeros_like(a)
+        is_batch = len(x.shape) == 2
+        for act in activations:
+            if is_batch:
+                min_shape = min(heat_map.shape[1], act.shape[1])
+                heat_map[:, :min_shape] += np.abs(act[:, :min_shape])
+            else:
+                heat_map += np.abs(act[:len(heat_map)])
+        heat_map = heat_map / (len(activations) + 1e-8)
+        
+        import hashlib
+        heat_bytes = (heat_map * 1e6).astype(np.int32).tobytes()
+        eruption_hash = hashlib.sha256(heat_bytes).digest()
+        eruption_pattern = np.frombuffer(eruption_hash, dtype=np.uint8).astype(np.float32) / 255.0
+        
+        if is_batch:
+            n_features = heat_map.shape[1]
+            if len(eruption_pattern) >= n_features:
+                eruption_pattern = eruption_pattern[:n_features]
+            else:
+                eruption_pattern = np.tile(eruption_pattern, int(np.ceil(n_features / len(eruption_pattern))))[:n_features]
+            blast_mult = 1.0 + 2.0 * (heat_map * eruption_pattern[np.newaxis, :])
+        else:
+            if len(eruption_pattern) >= len(heat_map):
+                eruption_pattern = eruption_pattern[:len(heat_map)]
+            else:
+                eruption_pattern = np.tile(eruption_pattern, int(np.ceil(len(heat_map) / len(eruption_pattern))))[:len(heat_map)]
+            blast_mult = 1.0 + 2.0 * (heat_map * eruption_pattern)
+        
+        a_blasted = a * blast_mult
+        
+        # Pass through final layer to get same dimension as cascade
+        blasted = self._activate(a_blasted.dot(self.weights[-1]) + self.biases[-1], name="swish")
+        
+        blast_energy = float(np.sum(np.abs(blasted)))
+        self.volcano_blast_history.append(blast_energy)
+        
+        # Final output: blend waterfall cascade with volcano blast (both are now same shape)
         final = (cascade * 0.6 + blasted * 0.4) / 1.6
         return np.maximum(0, np.minimum(1, final)).ravel()
 
@@ -322,11 +400,11 @@ class FeatureExtractor:
         self.out_dim = out_dim
         # Pre-compute constants for optimization
         self.mod_primes = np.array([3, 5, 7, 11, 13], dtype=np.float32)
-        self.bit_shifts = np.arange(32, dtype=np.int32)
+        self.bit_shifts = np.arange(32, dtype=np.int64)
 
     def extract(self, nonce: int, difficulty: float, timestamp: float):
         # Optimized: Vectorized bit extraction without string operations
-        nonce_int = int(nonce)
+        nonce_int = int(nonce) & 0xFFFFFFFF  # Ensure 32-bit range
         bit_array = ((nonce_int >> self.bit_shifts) & 1).astype(np.float32)
         hamming = np.array([bit_array.sum()], dtype=np.float32)
         low_bytes = np.array([(nonce_int >> (8 * i)) & 0xFF for i in range(4)], dtype=np.float32) / 255.0
@@ -348,7 +426,7 @@ class FeatureExtractor:
         time_feat = np.array([math.sin(timestamp / 60.0), math.cos(timestamp / 60.0), difficulty], dtype=np.float32)
         
         for i, nonce in enumerate(nonces):
-            nonce_int = int(nonce)
+            nonce_int = int(nonce) & 0xFFFFFFFF  # Ensure 32-bit range
             # Vectorized bit extraction
             bit_array = ((nonce_int >> self.bit_shifts) & 1).astype(np.float32)
             hamming = np.array([bit_array.sum()], dtype=np.float32)
