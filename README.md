@@ -25,96 +25,62 @@ Safety & legal note
 	- Follow pool and wallet provider terms of service.
 	- Use a valid Monero wallet address (mainnet: starts with '4').
 
-Getting started (recommended workflow)
+Setup & run (production-oriented)
 
-1) Prepare an isolated Python environment
+1) Create and activate a venv, install deps (use pinned lock for reproducibility)
 
 ```bash
 python -m venv venv
 source venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements.lock.txt  # or requirements.txt if you prefer minimal
 ```
 
-2) Quick demo (no external dependencies)
+2) Configure environment variables (Monero + XMRig)
 
 ```bash
-python demo_no_deps.py --cycles 5
-```
-
-3) Full prototype (requires `numpy` and `requests`)
-
-Edit `zephyr_ultimate_ai_miner_fixed.py`'s `CONFIG` at the top to set your Monero wallet, pool, and XMRig API URL. Example:
-
-```python
-CONFIG = {
-    "POOL_URL": os.environ.get("MONERO_POOL_URL", "pool.supportxmr.com"),
-    "POOL_PORT": int(os.environ.get("MONERO_POOL_PORT", "3333")),
-    "WALLET_ADDRESS": os.environ.get("MONERO_WALLET", "4BrL51JCzqkYjMCJ5ch2XUUoJGMVMyJUUbYodQyonmSEZAZvDZviiD3fGV61jCJoNroxPJS2XH8kvMQeFqBED76m4539A6o"),
-    ...
-}
-```
-
-Or set environment variables:
-
-```bash
-export MONERO_WALLET="<your-monero-address>"
+export MONERO_WALLET="4BrL51JCzqkYjMCJ5ch2XUUoJGMVMyJUUbYodQyonmSEZAZvDZviiD3fGV61jCJoNroxPJS2XH8kvMQeFqBED76m4539A6o"
 export MONERO_POOL="pool.supportxmr.com"
 export MONERO_POOL_PORT="3333"
+export MONERO_WORKER="quantumguard-qc3"
 export XMRIG_API_URL="http://127.0.0.1:18081"
+export XMRIG_PATH="/path/to/xmrig"  # set to your xmrig binary
 ```
 
-Then run (simulation mode recommended first):
+3) Run the dashboard (real telemetry + hashrate/earnings UI)
+
+```bash
+python dashboard.py --host 0.0.0.0 --port 8000
+# open http://localhost:8000
+```
+From the UI you can:
+- Start/stop XMRig (best-effort, local process only)
+- Poll telemetry from XMRig HTTP API
+- View hashrate bar, shares accepted/rejected, estimated daily earnings
+
+4) Run the miner prototype (simulation first)
 
 ```bash
 python zephyr_ultimate_ai_miner_fixed.py --simulate --cycles 20
 ```
-
-4) Dashboard (web UI)
-
+Then, with telemetry:
 ```bash
-export MONERO_WALLET="<your-address>"
-python dashboard.py --host 0.0.0.0 --port 8000
+python zephyr_ultimate_ai_miner_fixed.py --telemetry --telemetry-url $XMRIG_API_URL
 ```
 
-Open http://localhost:8000 to manage XMRig process and view telemetry.
-
-5) Telemetry-only connectivity to XMRig's HTTP API (non-invasive GET):
+5) Telemetry-only helper
 
 ```bash
-python xmrig_telemetry.py --api-url http://127.0.0.1:18081
-
-# or via main script
-python zephyr_ultimate_ai_miner_fixed.py --telemetry --telemetry-url http://127.0.0.1:8080
+python xmrig_telemetry.py --api-url $XMRIG_API_URL
 ```
 
-XMRig control (best-effort; you must provide a valid XMRig binary and config)
+6) XMRig setup (required for real mining)
+- Download XMRig: https://github.com/xmrig/xmrig/releases
+- Enable HTTP API (example): `./xmrig --api 127.0.0.1:18081 -o pool.supportxmr.com:3333 -u $MONERO_WALLET -p $MONERO_WORKER`
+- Keep XMRig running; the dashboard will poll it and can best-effort start/stop a local instance.
 
-```bash
-# Start XMRig as a subprocess using CONFIG values
-python zephyr_ultimate_ai_miner_fixed.py --start-xmrig --simulate --cycles 5
-
-# Stop the XMRig subprocess started above
-python zephyr_ultimate_ai_miner_fixed.py --stop-xmrig --simulate --cycles 1
-
-# Attempt share submission via XMRig HTTP API (only if your XMRig build exposes /submit)
-python zephyr_ultimate_ai_miner_fixed.py --cycles 5  # requires ENABLE_XMRIG_API True and XMRIG_API_URL set
-```
-Notes:
-- Control and submission endpoints vary by XMRig version; failures will be printed but won’t crash the script.
-- This project will not auto-start XMRig unless you pass `--start-xmrig` with a valid binary path in CONFIG.
-
-4) Dashboard (simulated hashing UI, black/green)
-
-```bash
-python dashboard.py --host 0.0.0.0 --port 8000
-# open http://localhost:8000/
-```
-Notes: the dashboard only hashes random nonces locally and shows a hardcoded Cake wallet. It does not submit shares or control XMRig. You can poll XMRig telemetry from the UI; it remains non-invasive.
-
-XMRig setup (brief)
-- Download XMRig from: https://github.com/xmrig/xmrig/releases
-- Run XMRig locally or on a host and enable its HTTP API (see XMRig docs): typically with `--api 127.0.0.1:8080` or equivalent config.
-- Start XMRig separately; this repo will not start or manage the XMRig process for you.
+Notes
+- `requirements.lock.txt` is the pinned snapshot of the current environment; prefer it for reproducible installs.
+- `demo_no_deps.py` is for constrained demo environments and is not part of production usage.
 
 CONFIG example (paste into `zephyr_ultimate_ai_miner_fixed.py` and edit):
 
