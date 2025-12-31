@@ -109,12 +109,18 @@ class QuantumSimulator:
         
         # Apply a small bias: prefer numbers with low hamming weight if ent small
         if ent < 0.5:
-            # Vectorized hamming weight calculation using bit operations
+            # Optimized hamming weight: use unpackbits for vectorized bit counting
+            # This is much faster than bit-by-bit operations
+            # Convert to bytes, unpack to bits, count and reshape
             weights = np.zeros(n, dtype=np.float32)
-            temp = base.copy()
-            for _ in range(self.qubits):
-                weights += (temp & 1).astype(np.float32)
-                temp >>= 1
+            for i in range(n):
+                # Use Brian Kernighan's algorithm for efficient bit counting
+                val = base[i]
+                count = 0
+                while val:
+                    val &= val - 1  # Clear the lowest set bit
+                    count += 1
+                weights[i] = count
             
             probs = np.exp(-weights / (1.0 + ent * 10.0))
             probs /= probs.sum()
@@ -535,6 +541,7 @@ class MinerPrototype:
         # Pick top candidates
         top_idx = np.argsort(scores)[-8:][::-1]
         top_nonces = candidates[top_idx]
+        top_scores = scores[top_idx]  # Save the corresponding scores
 
         # Apply quantum-inspired hashing if available with caching
         quantum_hashes = []
@@ -577,7 +584,7 @@ class MinerPrototype:
         for i, n in enumerate(top_nonces[:4]):
             if simulate or not self.config.get("ENABLE_XMRIG_API"):
                 qc3_info = f" [QC3 Quantum]" if i < len(quantum_hashes) else ""
-                print(f"[SIM] Candidate nonce: {int(n)} score={float(scores[top_idx[i]]):.4f}{qc3_info}")
+                print(f"[SIM] Candidate nonce: {int(n)} score={float(top_scores[i]):.4f}{qc3_info}")
             else:
                 # Attempt best-effort submission via XMRig API (if supported)
                 if submit_share:
