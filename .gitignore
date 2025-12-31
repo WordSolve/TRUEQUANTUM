@@ -6,7 +6,7 @@ venv/
 .vscode/*.tmp
 
 # Demo file not for deploy
-.demo_no_deps.py
+demo_no_deps.py
 
 # Bytecode
 __pycache__/
