@@ -115,7 +115,8 @@ class LayerCakeTenDimensional:
         # Apply harmonic transformation: each byte affected by neighbors
         result = arr.copy()
         for i in range(1, len(result) - 1):
-            result[i] = (arr[i] + arr[i-1] + arr[i+1]) % 256
+            # Use int16 to avoid overflow, then modulo
+            result[i] = np.uint8((int(arr[i]) + int(arr[i-1]) + int(arr[i+1])) % 256)
         return result.tobytes()
     
     def layer_4_entropy(self, prev: bytes) -> bytes:
