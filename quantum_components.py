@@ -75,7 +75,13 @@ class SuperpositionTechnology:
             bit_idx = i % 32
             bit = (nonce >> bit_idx) & 1
             state_vec[i] = float(bit) / np.sqrt(self.states)
-        return state_vec / np.linalg.norm(state_vec)
+        # Normalize with safety check for near-zero norm
+        norm = np.linalg.norm(state_vec)
+        if norm < 1e-10:
+            # For near-zero state vector (e.g., nonce with all zero bits), 
+            # return uniform superposition across all states
+            return np.ones(self.states, dtype=np.float32) / np.sqrt(self.states)
+        return state_vec / norm
     
     def collapse(self, state_vec, measurement: bytes) -> float:
         """Collapse superposition via measurement hash.

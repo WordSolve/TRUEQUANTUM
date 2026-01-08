@@ -11,3 +11,4 @@ demo_no_deps.py
 # Bytecode
 __pycache__/
 *.pyc
+dashboard.log
