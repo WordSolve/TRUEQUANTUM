@@ -75,10 +75,11 @@ class SuperpositionTechnology:
             bit_idx = i % 32
             bit = (nonce >> bit_idx) & 1
             state_vec[i] = float(bit) / np.sqrt(self.states)
-        # Normalize with safety check for zero vector
+        # Normalize with safety check for near-zero norm
         norm = np.linalg.norm(state_vec)
         if norm < 1e-10:
-            # For zero nonce, return uniform superposition
+            # For near-zero state vector (e.g., nonce with all zero bits), 
+            # return uniform superposition across all states
             return np.ones(self.states, dtype=np.float32) / np.sqrt(self.states)
         return state_vec / norm
     
